@@ -3,6 +3,9 @@ const cors = require('cors');
 const app = express();
 require('dotenv').config();
 const { MongoClient, ServerApiVersion } = require('mongodb');
+// Add this line to import Mongoose
+const mongoose = require('mongoose');
+
 
 
 
@@ -37,34 +40,27 @@ app.use(cors({
 
 
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
-const uri = process.env.MONGODB_URI; // <--- Define 'uri' or use the env var directly
-const client = new MongoClient(uri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
-  }
+// Mongo connection
+const mongoUri = process.env.MONGODB_URI; //
+mongoose.set('strictQuery', true);
+mongoose
+  .connect(mongoUri)
+  .then(() => console.log('[mongo] Connected'))
+  .catch((err) => console.error('[mongo] Connection error', err.message));
+
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', service: process.env.APP_NAME || 'Public Infrastructure Issue Reporting' });
 });
 
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', service: process.env.APP_NAME || 'Public Infrastructure Issue Reporting' });
+});
 
-async function run() {
-  try {
-    // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+app.use((err, req, res, next) => {
+  console.error('[error]', err.message);
+  res.status(500).json({ message: 'Internal server error' });
+});
 
-
-
-
-    // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
-  } finally {
-    // Ensures that the client will close when you finish/error
-   // await client.close();
-  }
-}
-run().catch(console.dir);
 
 
 
