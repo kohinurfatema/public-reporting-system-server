@@ -36,6 +36,11 @@ router.post('/', async (req, res) => {
         if (!user) {
             return res.status(404).json({ message: 'Reporter user not found in database.' });
         }
+        
+        // Blocked User Check
+        if (user.isBlocked) {
+             return res.status(403).json({ message: 'Your account is blocked and cannot submit issues.' });
+        }
 
         // Check if the user is a free user AND has reached the limit of 3 issues
         if (!user.isPremium && user.issuesReportedCount >= MAX_FREE_ISSUES) {
@@ -91,13 +96,13 @@ router.post('/', async (req, res) => {
 
 // ----------------------------------------------------------------------
 // 2. GET /issues/user/:email
-// Purpose: Fetch all issues reported by a specific user (Citizen Dashboard)
-// Path: GET /issues/user/:email
+// Purpose: Fetch all issues reported by a specific user (My Issues Page)
+// Path: GET /issues/user/:email?status=X&category=Y
 // ----------------------------------------------------------------------
 router.get('/user/:email', async (req, res) => {
     try {
         const reporterEmail = req.params.email;
-        // Allow filtering by status and category from query parameters (e.g., ?status=Pending&category=Pothole)
+        // Allow filtering by status and category from query parameters
         const { status, category } = req.query; 
 
         let filter = { reporterEmail: reporterEmail };
@@ -125,7 +130,68 @@ router.get('/user/:email', async (req, res) => {
 
 
 // ----------------------------------------------------------------------
-// 3. PATCH /issues/:id
+// 3. GET /issues/stats/:email
+// Purpose: Fetch total counts (submitted, pending, resolved) for the Citizen Dashboard Home.
+// Path: GET /issues/stats/:email
+// ----------------------------------------------------------------------
+router.get('/stats/:email', async (req, res) => {
+    const reporterEmail = req.params.email;
+
+    try {
+        const stats = await Issue.aggregate([
+            // Stage 1: Filter issues to only include those reported by the logged-in user
+            { $match: { reporterEmail: reporterEmail } },
+
+            // Stage 2: Group all matching documents together to calculate counts
+            {
+                $group: {
+                    _id: null, 
+                    totalSubmitted: { $sum: 1 }, 
+                    
+                    // Count issues by specific status
+                    totalPending: { 
+                        $sum: { $cond: [{ $eq: ["$status", "Pending"] }, 1, 0] } 
+                    },
+                    totalInProgress: { 
+                        $sum: { $cond: [{ $in: ["$status", ["In-Progress", "Working"]] }, 1, 0] } 
+                    },
+                    totalResolved: { 
+                        $sum: { $cond: [{ $eq: ["$status", "Resolved"] }, 1, 0] } 
+                    },
+                }
+            },
+            
+            // Stage 3: Clean up the output structure
+            {
+                $project: {
+                    _id: 0, 
+                    totalSubmitted: 1,
+                    totalPending: 1,
+                    totalInProgress: 1,
+                    totalResolved: 1,
+                }
+            }
+        ]);
+
+        // If no issues are found, return default zero counts
+        const userStats = stats.length > 0 ? stats[0] : {
+            totalSubmitted: 0,
+            totalPending: 0,
+            totalInProgress: 0,
+            totalResolved: 0,
+        };
+
+        res.json(userStats);
+
+    } catch (error) {
+        console.error('[GET /issues/stats/:email Error]', error);
+        res.status(500).json({ message: 'Internal server error while fetching dashboard stats.' });
+    }
+});
+
+
+// ----------------------------------------------------------------------
+// 4. PATCH /issues/:id
 // Purpose: Citizen edits issue details (ONLY if status is 'Pending')
 // Path: PATCH /issues/:id
 // ----------------------------------------------------------------------
@@ -144,22 +210,28 @@ router.patch('/:id', async (req, res) => {
         if (issue.status !== 'Pending') {
             return res.status(403).json({ message: `Issue status is '${issue.status}'. Only 'Pending' issues can be edited.` });
         }
+        
+        // Blocked User Check (Server-side defense)
+        const user = await User.findOne({ email: issue.reporterEmail });
+        if (user && user.isBlocked) {
+            return res.status(403).json({ message: 'Your account is blocked and cannot edit issues.' });
+        }
 
-        // Update fields if provided in the request body
+
+        // Update fields
         issue.title = title || issue.title;
         issue.description = description || issue.description;
         issue.category = category || issue.category;
         issue.location = location || issue.location;
         
-        // Handle image update (allows explicit null to remove an image, or update with a new URL)
         if (imageUrl !== undefined) {
             issue.imageUrl = imageUrl;
         }
-        issue.updatedAt = new Date(); // Update timestamp
+        issue.updatedAt = new Date(); 
 
         // Add a new entry to the timeline
         issue.timeline.push({
-            status: 'Pending', // Status remains Pending
+            status: 'Pending', 
             message: 'Issue details updated by citizen.',
             updatedBy: 'Citizen',
             updaterEmail: issue.reporterEmail,
@@ -178,7 +250,7 @@ router.patch('/:id', async (req, res) => {
 
 
 // ----------------------------------------------------------------------
-// 4. DELETE /issues/:id
+// 5. DELETE /issues/:id
 // Purpose: Citizen deletes issue (ONLY if status is 'Pending')
 // Path: DELETE /issues/:id
 // ----------------------------------------------------------------------
@@ -197,6 +269,12 @@ router.delete('/:id', async (req, res) => {
             return res.status(403).json({ message: `Issue status is '${issue.status}'. Only 'Pending' issues can be deleted.` });
         }
         
+        // Blocked User Check (Server-side defense)
+        const user = await User.findOne({ email: issue.reporterEmail });
+        if (user && user.isBlocked) {
+            return res.status(403).json({ message: 'Your account is blocked and cannot delete issues.' });
+        }
+
         // Remove the issue from the database
         const result = await Issue.deleteOne({ _id: issueId });
 
