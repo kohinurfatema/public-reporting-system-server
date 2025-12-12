@@ -36,7 +36,7 @@ router.post('/', async (req, res) => {
         if (!user) {
             return res.status(404).json({ message: 'Reporter user not found in database.' });
         }
-        
+
         // Blocked User Check
         if (user.isBlocked) {
              return res.status(403).json({ message: 'Your account is blocked and cannot submit issues.' });
@@ -103,7 +103,7 @@ router.get('/user/:email', async (req, res) => {
     try {
         const reporterEmail = req.params.email;
         // Allow filtering by status and category from query parameters
-        const { status, category } = req.query; 
+        const { status, category } = req.query;
 
         let filter = { reporterEmail: reporterEmail };
 
@@ -117,7 +117,7 @@ router.get('/user/:email', async (req, res) => {
 
         // Find all issues matching the filter, sorted by creation date (newest first)
         const issues = await Issue.find(filter)
-            .sort({ createdAt: -1 }); 
+            .sort({ createdAt: -1 });
 
         // Return the array of issues (empty array if none found)
         res.json(issues);
@@ -145,26 +145,26 @@ router.get('/stats/:email', async (req, res) => {
             // Stage 2: Group all matching documents together to calculate counts
             {
                 $group: {
-                    _id: null, 
-                    totalSubmitted: { $sum: 1 }, 
-                    
+                    _id: null,
+                    totalSubmitted: { $sum: 1 },
+
                     // Count issues by specific status
-                    totalPending: { 
-                        $sum: { $cond: [{ $eq: ["$status", "Pending"] }, 1, 0] } 
+                    totalPending: {
+                        $sum: { $cond: [{ $eq: ["$status", "Pending"] }, 1, 0] }
                     },
-                    totalInProgress: { 
-                        $sum: { $cond: [{ $in: ["$status", ["In-Progress", "Working"]] }, 1, 0] } 
+                    totalInProgress: {
+                        $sum: { $cond: [{ $in: ["$status", ["In-Progress", "Working"]] }, 1, 0] }
                     },
-                    totalResolved: { 
-                        $sum: { $cond: [{ $eq: ["$status", "Resolved"] }, 1, 0] } 
+                    totalResolved: {
+                        $sum: { $cond: [{ $eq: ["$status", "Resolved"] }, 1, 0] }
                     },
                 }
             },
-            
+
             // Stage 3: Clean up the output structure
             {
                 $project: {
-                    _id: 0, 
+                    _id: 0,
                     totalSubmitted: 1,
                     totalPending: 1,
                     totalInProgress: 1,
@@ -210,7 +210,7 @@ router.patch('/:id', async (req, res) => {
         if (issue.status !== 'Pending') {
             return res.status(403).json({ message: `Issue status is '${issue.status}'. Only 'Pending' issues can be edited.` });
         }
-        
+
         // Blocked User Check (Server-side defense)
         const user = await User.findOne({ email: issue.reporterEmail });
         if (user && user.isBlocked) {
@@ -223,21 +223,21 @@ router.patch('/:id', async (req, res) => {
         issue.description = description || issue.description;
         issue.category = category || issue.category;
         issue.location = location || issue.location;
-        
+
         if (imageUrl !== undefined) {
             issue.imageUrl = imageUrl;
         }
-        issue.updatedAt = new Date(); 
+        issue.updatedAt = new Date();
 
         // Add a new entry to the timeline
         issue.timeline.push({
-            status: 'Pending', 
+            status: 'Pending',
             message: 'Issue details updated by citizen.',
             updatedBy: 'Citizen',
             updaterEmail: issue.reporterEmail,
             updatedAt: new Date()
         });
-        
+
         const updatedIssue = await issue.save();
 
         res.json({ message: 'Issue successfully updated.', issue: updatedIssue });
@@ -268,7 +268,7 @@ router.delete('/:id', async (req, res) => {
         if (issue.status !== 'Pending') {
             return res.status(403).json({ message: `Issue status is '${issue.status}'. Only 'Pending' issues can be deleted.` });
         }
-        
+
         // Blocked User Check (Server-side defense)
         const user = await User.findOne({ email: issue.reporterEmail });
         if (user && user.isBlocked) {
@@ -293,6 +293,82 @@ router.delete('/:id', async (req, res) => {
     } catch (error) {
         console.error('[DELETE /issues/:id Error]', error);
         res.status(500).json({ message: 'Internal server error during issue deletion.' });
+    }
+});
+
+
+// ----------------------------------------------------------------------
+// 6. GET /issues/:id (NEW ROUTE)
+// Purpose: Fetch a single issue by ID (for IssueDetails page)
+// Path: GET /issues/:id
+// ----------------------------------------------------------------------
+router.get('/:id', async (req, res) => {
+    try {
+        const issueId = req.params.id;
+        // Use select('-staffPassword') if the Issue model includes staff data you want to exclude
+        const issue = await Issue.findById(issueId); 
+
+        if (!issue) {
+            return res.status(404).json({ message: 'Issue not found.' });
+        }
+
+        res.json(issue);
+
+    } catch (error) {
+        console.error('[GET /issues/:id Error]', error);
+        res.status(500).json({ message: 'Internal server error while fetching issue details.' });
+    }
+});
+
+
+// ----------------------------------------------------------------------
+// 7. PATCH /issues/boost/:id (NEW ROUTE - Boost Priority)
+// Purpose: Boost priority to High (after payment) and record timeline event.
+// Path: PATCH /issues/boost/:id
+// ----------------------------------------------------------------------
+const ISSUE_BOOST_PRICE = 100; // Define the boost price on the server as well
+
+router.patch('/boost/:id', async (req, res) => {
+    const issueId = req.params.id;
+    // const { paymentId } = req.body; // In a real app, you'd verify a paymentId here
+
+    try {
+        const issue = await Issue.findById(issueId);
+
+        if (!issue) {
+            return res.status(404).json({ message: 'Issue not found.' });
+        }
+        
+        // Prevent boosting if already high priority
+        if (issue.priority === 'High') {
+            return res.status(400).json({ message: 'Issue is already at High priority.' });
+        }
+
+        // --- 1. Perform Payment Verification (Simulated for this implementation) ---
+        // In a real application, you would contact your payment gateway (Stripe/SSLCommerz)
+        // using the payment details passed in req.body to ensure 100tk was paid.
+
+        // --- 2. Update Issue Priority and Timeline ---
+        issue.priority = 'High';
+        
+        issue.timeline.push({
+            status: issue.status, // Keep current status
+            message: `Priority boosted to HIGH via citizen payment (${ISSUE_BOOST_PRICE}tk simulated).`,
+            updatedBy: 'Citizen', // Updated by the citizen who paid
+            updaterEmail: issue.reporterEmail,
+            updatedAt: new Date()
+        });
+
+        const updatedIssue = await issue.save();
+
+        res.json({ 
+            message: 'Issue priority boosted successfully.', 
+            issue: updatedIssue 
+        });
+
+    } catch (error) {
+        console.error('[PATCH /issues/boost/:id Error]', error);
+        res.status(500).json({ message: 'Internal server error during boost process.' });
     }
 });
 
