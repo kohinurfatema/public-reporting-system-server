@@ -191,7 +191,32 @@ router.get('/stats/:email', async (req, res) => {
 
 
 // ----------------------------------------------------------------------
-// 4. PATCH /issues/:id
+// 4. GET /issues/latest-resolved (PUBLIC - For Home Page)
+// Purpose: Get latest resolved issues for display on home page
+// Path: GET /issues/latest-resolved?limit=6
+// NOTE: This route MUST come BEFORE /:id routes to avoid matching "latest-resolved" as an ID
+// ----------------------------------------------------------------------
+router.get('/latest-resolved', async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 6;
+
+        // Fetch resolved issues, sorted by most recently resolved
+        const issues = await Issue.find({ status: 'Resolved' })
+            .sort({ updatedAt: -1 })
+            .limit(limit)
+            .select('title category location status priority imageUrl upvotes createdAt updatedAt');
+
+        res.json(issues);
+
+    } catch (error) {
+        console.error('[GET /issues/latest-resolved Error]', error);
+        res.status(500).json({ message: 'Internal server error while fetching latest resolved issues.' });
+    }
+});
+
+
+// ----------------------------------------------------------------------
+// 5. PATCH /issues/:id
 // Purpose: Citizen edits issue details (ONLY if status is 'Pending')
 // Path: PATCH /issues/:id
 // ----------------------------------------------------------------------
@@ -369,6 +394,122 @@ router.patch('/boost/:id', async (req, res) => {
     } catch (error) {
         console.error('[PATCH /issues/boost/:id Error]', error);
         res.status(500).json({ message: 'Internal server error during boost process.' });
+    }
+});
+
+
+// ----------------------------------------------------------------------
+// 8. GET /issues (PUBLIC - All Issues with filters, search, pagination)
+// Purpose: Fetch all issues for public All Issues page
+// Path: GET /issues?page=1&limit=10&search=X&status=X&category=X&priority=X
+// ----------------------------------------------------------------------
+router.get('/', async (req, res) => {
+    try {
+        const {
+            page = 1,
+            limit = 10,
+            search = '',
+            status = '',
+            category = '',
+            priority = ''
+        } = req.query;
+
+        // Build filter object
+        let filter = {};
+
+        // Search filter (by title, category, or location)
+        if (search) {
+            filter.$or = [
+                { title: { $regex: search, $options: 'i' } },
+                { category: { $regex: search, $options: 'i' } },
+                { location: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        // Status filter
+        if (status) {
+            filter.status = status;
+        }
+
+        // Category filter
+        if (category) {
+            filter.category = category;
+        }
+
+        // Priority filter
+        if (priority) {
+            filter.priority = priority;
+        }
+
+        // Count total matching documents for pagination
+        const total = await Issue.countDocuments(filter);
+
+        // Fetch issues with pagination
+        // Sort by priority (High first) then by createdAt (newest first)
+        const issues = await Issue.find(filter)
+            .sort({ priority: -1, createdAt: -1 })
+            .skip((parseInt(page) - 1) * parseInt(limit))
+            .limit(parseInt(limit));
+
+        res.json({
+            issues,
+            pagination: {
+                currentPage: parseInt(page),
+                totalPages: Math.ceil(total / parseInt(limit)),
+                totalItems: total,
+                itemsPerPage: parseInt(limit)
+            }
+        });
+
+    } catch (error) {
+        console.error('[GET /issues Error]', error);
+        res.status(500).json({ message: 'Internal server error while fetching issues.' });
+    }
+});
+
+
+// ----------------------------------------------------------------------
+// 9. PATCH /issues/:id/upvote (Upvote an issue)
+// Purpose: Allow logged-in user to upvote an issue (once per issue)
+// Path: PATCH /issues/:id/upvote
+// ----------------------------------------------------------------------
+router.patch('/:id/upvote', async (req, res) => {
+    const issueId = req.params.id;
+    const { userEmail } = req.body;
+
+    if (!userEmail) {
+        return res.status(400).json({ message: 'User email is required to upvote.' });
+    }
+
+    try {
+        const issue = await Issue.findById(issueId);
+
+        if (!issue) {
+            return res.status(404).json({ message: 'Issue not found.' });
+        }
+
+        // Check if user is trying to upvote their own issue
+        if (issue.reporterEmail === userEmail) {
+            return res.status(403).json({ message: 'You cannot upvote your own issue.' });
+        }
+
+        // Check if user has already upvoted
+        if (issue.upvotes.includes(userEmail)) {
+            return res.status(400).json({ message: 'You have already upvoted this issue.' });
+        }
+
+        // Add user to upvotes array
+        issue.upvotes.push(userEmail);
+        await issue.save();
+
+        res.json({
+            message: 'Upvote successful!',
+            upvoteCount: issue.upvotes.length
+        });
+
+    } catch (error) {
+        console.error('[PATCH /issues/:id/upvote Error]', error);
+        res.status(500).json({ message: 'Internal server error during upvote.' });
     }
 });
 

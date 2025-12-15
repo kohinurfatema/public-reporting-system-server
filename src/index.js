@@ -7,7 +7,11 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 
 // 🎯 MORGAN for logging (Good practice)
-const morgan = require('morgan'); 
+const morgan = require('morgan');
+
+// Initialize Firebase Admin SDK
+const { initializeFirebase } = require('./config/firebase');
+initializeFirebase(); 
 
 // 🎯 IMPORT ROUTERS (Using the router names from your file structure)
 const issuesRouter = require('./routes/issueRoutes');
