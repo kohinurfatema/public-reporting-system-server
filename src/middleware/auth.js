@@ -14,11 +14,18 @@ const verifyToken = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
 
     try {
+        // Log token info for debugging (first 20 chars only for security)
+        console.log('[auth] Verifying token starting with:', token.substring(0, 20) + '...');
+
         const decodedToken = await admin.auth().verifyIdToken(token);
+        console.log('[auth] Token verified for:', decodedToken.email);
         req.user = decodedToken;
         next();
     } catch (error) {
-        console.error('[auth] Token verification failed:', error.message);
+        console.error('[auth] Token verification failed!');
+        console.error('[auth] Error code:', error.code);
+        console.error('[auth] Error message:', error.message);
+        console.error('[auth] Full error:', JSON.stringify(error, null, 2));
         return res.status(401).json({ message: 'Unauthorized: Invalid token' });
     }
 };

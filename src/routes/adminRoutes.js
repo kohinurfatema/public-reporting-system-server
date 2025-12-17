@@ -4,6 +4,7 @@ const express = require('express');
 const router = express.Router();
 const Issue = require('../models/Issue');
 const User = require('../models/User');
+const Payment = require('../models/Payment');
 const { verifyToken, verifyAdmin } = require('../middleware/auth');
 
 // Apply middleware to all admin routes
@@ -384,6 +385,45 @@ router.get('/latest', async (req, res) => {
         res.json({ latestIssues, latestUsers });
     } catch (error) {
         console.error('[GET /admin/latest Error]', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
+
+// ----------------------------------------------------------------------
+// 12. GET /admin/payments
+// Purpose: Get all payments with filters and pagination
+// ----------------------------------------------------------------------
+router.get('/payments', async (req, res) => {
+    try {
+        const { page = 1, limit = 10, type } = req.query;
+
+        let filter = {};
+        if (type && type !== 'all') filter.type = type;
+
+        const total = await Payment.countDocuments(filter);
+        const payments = await Payment.find(filter)
+            .sort({ createdAt: -1 })
+            .skip((parseInt(page) - 1) * parseInt(limit))
+            .limit(parseInt(limit));
+
+        // Calculate total revenue
+        const totalRevenue = await Payment.aggregate([
+            { $match: { status: 'completed' } },
+            { $group: { _id: null, total: { $sum: '$amount' } } }
+        ]);
+
+        res.json({
+            payments,
+            totalAmount: totalRevenue[0]?.total || 0,
+            pagination: {
+                currentPage: parseInt(page),
+                totalPages: Math.ceil(total / parseInt(limit)),
+                totalItems: total
+            }
+        });
+    } catch (error) {
+        console.error('[GET /admin/payments Error]', error);
         res.status(500).json({ message: 'Internal server error' });
     }
 });

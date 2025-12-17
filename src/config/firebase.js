@@ -15,9 +15,10 @@ const initializeFirebase = () => {
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount)
         });
-        console.log('[firebase] Admin SDK initialized');
+        console.log('[firebase] Admin SDK initialized for project:', serviceAccount.project_id);
     } catch (error) {
         console.error('[firebase] Initialization error:', error.message);
+        console.error('[firebase] Make sure the service account JSON file exists and is valid');
     }
 
     return admin;
