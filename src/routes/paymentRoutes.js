@@ -10,8 +10,8 @@ const { verifyToken } = require('../middleware/auth');
 // Initialize Stripe
 const stripe = require('stripe')(process.env.STRIPE_SECRET);
 
-// Client URL for redirects
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+// Client URL for redirects (using CLIENT_ORIGIN from .env)
+const CLIENT_URL = process.env.CLIENT_ORIGIN || process.env.CLIENT_URL || 'http://localhost:5173';
 
 // Apply token verification to all payment routes
 router.use(verifyToken);
