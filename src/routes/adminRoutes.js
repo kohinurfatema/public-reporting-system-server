@@ -130,7 +130,8 @@ router.patch('/issues/:id/assign', async (req, res) => {
             return res.status(404).json({ message: 'Staff member not found' });
         }
 
-        // Update issue with staff assignment
+        // Update issue with staff assignment (set both fields for compatibility)
+        issue.assignedStaff = staffEmail; // For staff routes
         issue.staffAssigned = {
             email: staffEmail,
             name: staffName || staff.name

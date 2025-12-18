@@ -49,7 +49,11 @@ const IssueSchema = new mongoose.Schema({
     },
     
     // ASSIGNMENT & INTERACTION
-    assignedStaff: { type: String, default: null }, // Staff email
+    assignedStaff: { type: String, default: null }, // Staff email (for backward compatibility)
+    staffAssigned: {
+        email: { type: String, default: null },
+        name: { type: String, default: null }
+    },
     upvotes: { 
         type: [String], // Array of user emails who upvoted
         default: []
