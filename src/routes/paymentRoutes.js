@@ -59,10 +59,11 @@ router.post('/', async (req, res) => {
             if (issue) {
                 issue.priority = 'High';
                 issue.timeline.push({
-                    action: 'Priority Boosted',
-                    description: 'Issue priority boosted to High via payment',
-                    performedBy: user.name || userEmail,
-                    timestamp: new Date()
+                    status: 'Boosted',
+                    message: 'Issue priority boosted to High via payment',
+                    updatedBy: 'Citizen',
+                    updaterEmail: userEmail,
+                    updatedAt: new Date()
                 });
                 await issue.save();
             }
@@ -314,10 +315,11 @@ router.post('/verify', async (req, res) => {
             if (issue) {
                 issue.priority = 'High';
                 issue.timeline.push({
-                    action: 'Priority Boosted',
-                    description: 'Issue priority boosted to High via Stripe payment',
-                    performedBy: user.name || userEmail,
-                    timestamp: new Date()
+                    status: 'Boosted',
+                    message: 'Issue priority boosted to High via Stripe payment',
+                    updatedBy: 'Citizen',
+                    updaterEmail: userEmail,
+                    updatedAt: new Date()
                 });
                 await issue.save();
             }

@@ -19,7 +19,7 @@ router.get('/stats/:email', async (req, res) => {
             return res.status(404).json({ message: 'Staff not found' });
         }
 
-        const assignedIssues = await Issue.find({ assignedTo: email });
+        const assignedIssues = await Issue.find({ assignedStaff: email });
 
         const totalAssigned = assignedIssues.length;
         const resolved = assignedIssues.filter(i => i.status === 'Resolved' || i.status === 'Closed').length;
@@ -76,7 +76,7 @@ router.get('/issues/:email', async (req, res) => {
             return res.status(404).json({ message: 'Staff not found' });
         }
 
-        const filter = { assignedTo: email };
+        const filter = { assignedStaff: email };
         if (status && status !== 'all') filter.status = status;
         if (priority && priority !== 'all') filter.priority = priority;
         if (category && category !== 'all') filter.category = category;
@@ -117,7 +117,7 @@ router.patch('/issues/:id/status', async (req, res) => {
             return res.status(404).json({ message: 'Issue not found' });
         }
 
-        if (issue.assignedTo !== staffEmail) {
+        if (issue.assignedStaff !== staffEmail) {
             return res.status(403).json({ message: 'You are not assigned to this issue' });
         }
 
@@ -125,10 +125,11 @@ router.patch('/issues/:id/status', async (req, res) => {
         issue.status = status;
 
         issue.timeline.push({
-            action: 'Status Changed',
-            description: `Status changed from ${previousStatus} to ${status}`,
-            performedBy: staffName || staffEmail,
-            timestamp: new Date()
+            status: status,
+            message: `Status changed from ${previousStatus} to ${status}`,
+            updatedBy: 'Staff',
+            updaterEmail: staffEmail,
+            updatedAt: new Date()
         });
 
         await issue.save();
