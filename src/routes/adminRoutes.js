@@ -6,6 +6,7 @@ const Issue = require('../models/Issue');
 const User = require('../models/User');
 const Payment = require('../models/Payment');
 const { verifyToken, verifyAdmin } = require('../middleware/auth');
+const admin = require('firebase-admin');
 
 // Apply middleware to all admin routes
 router.use(verifyToken, verifyAdmin);
@@ -283,17 +284,41 @@ router.get('/staff', async (req, res) => {
 // ----------------------------------------------------------------------
 // 8. POST /admin/staff
 // Purpose: Create a new staff member
+// NOTE: Creates both Firebase Auth account AND MongoDB user document
 // ----------------------------------------------------------------------
 router.post('/staff', async (req, res) => {
-    const { email, name, photoURL, phone, department } = req.body;
+    const { email, name, photoURL, phone, department, password } = req.body;
 
     try {
-        // Check if user already exists
+        // Validate password is provided
+        if (!password || password.length < 6) {
+            return res.status(400).json({ message: 'Password is required and must be at least 6 characters' });
+        }
+
+        // Check if user already exists in MongoDB
         const existingUser = await User.findOne({ email });
         if (existingUser) {
             return res.status(400).json({ message: 'User with this email already exists' });
         }
 
+        // Create Firebase Auth account first
+        let firebaseUser;
+        try {
+            firebaseUser = await admin.auth().createUser({
+                email,
+                password,
+                displayName: name,
+                photoURL: photoURL || null
+            });
+        } catch (firebaseError) {
+            console.error('[Firebase Auth Error]', firebaseError);
+            return res.status(400).json({
+                message: 'Failed to create Firebase account',
+                error: firebaseError.message
+            });
+        }
+
+        // Create MongoDB user document
         const newStaff = new User({
             email,
             name,
@@ -308,9 +333,25 @@ router.post('/staff', async (req, res) => {
 
         await newStaff.save();
 
-        res.status(201).json({ message: 'Staff created successfully', staff: newStaff });
+        res.status(201).json({
+            message: 'Staff created successfully with Firebase Auth account',
+            staff: newStaff,
+            firebaseUid: firebaseUser.uid
+        });
     } catch (error) {
         console.error('[POST /admin/staff Error]', error);
+
+        // If MongoDB save fails but Firebase account was created, try to delete the Firebase account
+        if (error.name === 'MongoError' || error.name === 'ValidationError') {
+            try {
+                const user = await admin.auth().getUserByEmail(email);
+                await admin.auth().deleteUser(user.uid);
+                console.log('[Cleanup] Deleted Firebase account after MongoDB failure');
+            } catch (cleanupError) {
+                console.error('[Cleanup Error]', cleanupError);
+            }
+        }
+
         res.status(500).json({ message: 'Internal server error' });
     }
 });
