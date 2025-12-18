@@ -6,6 +6,8 @@ const app = express();
 require('dotenv').config();
 const mongoose = require('mongoose');
 
+const stripe = require('stripe')(process.env.STRIPE_SECRET);
+
 // MORGAN for logging (Good practice)
 const morgan = require('morgan');
 
