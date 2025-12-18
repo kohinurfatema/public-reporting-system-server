@@ -4,3 +4,4 @@ node_modules
 
 # Firebase Admin SDK credentials
 **/*firebase-adminsdk*.json
+.vercel
