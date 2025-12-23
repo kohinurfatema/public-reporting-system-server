@@ -84,10 +84,23 @@ router.get('/issues/:email', async (req, res) => {
         const total = await Issue.countDocuments(filter);
 
         // Boosted (High priority) first, then by date
-        const issues = await Issue.find(filter)
-            .sort({ priority: -1, createdAt: -1 })
-            .skip((parseInt(page) - 1) * parseInt(limit))
-            .limit(parseInt(limit));
+        const issues = await Issue.aggregate([
+            { $match: filter },
+            {
+                $addFields: {
+                    priorityOrder: {
+                        $cond: {
+                            if: { $eq: ['$priority', 'High'] },
+                            then: 0,  // High priority comes first
+                            else: 1   // Normal priority comes second
+                        }
+                    }
+                }
+            },
+            { $sort: { priorityOrder: 1, createdAt: -1 } },
+            { $skip: (parseInt(page) - 1) * parseInt(limit) },
+            { $limit: parseInt(limit) }
+        ]);
 
         res.json({
             issues,

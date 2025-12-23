@@ -115,9 +115,22 @@ router.get('/user/:email', async (req, res) => {
             filter.category = category;
         }
 
-        // Find all issues matching the filter, sorted by creation date (newest first)
-        const issues = await Issue.find(filter)
-            .sort({ createdAt: -1 });
+        // Find all issues matching the filter, sorted by priority (High first) then creation date (newest first)
+        const issues = await Issue.aggregate([
+            { $match: filter },
+            {
+                $addFields: {
+                    priorityOrder: {
+                        $cond: {
+                            if: { $eq: ['$priority', 'High'] },
+                            then: 0,  // High priority comes first
+                            else: 1   // Normal priority comes second
+                        }
+                    }
+                }
+            },
+            { $sort: { priorityOrder: 1, createdAt: -1 } }
+        ]);
 
         // Return the array of issues (empty array if none found)
         res.json(issues);
@@ -200,11 +213,36 @@ router.get('/latest-resolved', async (req, res) => {
     try {
         const limit = parseInt(req.query.limit) || 6;
 
-        // Fetch resolved issues, sorted by most recently resolved
-        const issues = await Issue.find({ status: 'Resolved' })
-            .sort({ updatedAt: -1 })
-            .limit(limit)
-            .select('title category location status priority imageUrl upvotes createdAt updatedAt');
+        // Fetch resolved issues, sorted by priority (High first), then by most recently resolved
+        const issues = await Issue.aggregate([
+            { $match: { status: 'Resolved' } },
+            {
+                $addFields: {
+                    priorityOrder: {
+                        $cond: {
+                            if: { $eq: ['$priority', 'High'] },
+                            then: 0,  // High priority comes first
+                            else: 1   // Normal priority comes second
+                        }
+                    }
+                }
+            },
+            { $sort: { priorityOrder: 1, updatedAt: -1 } },
+            { $limit: limit },
+            {
+                $project: {
+                    title: 1,
+                    category: 1,
+                    location: 1,
+                    status: 1,
+                    priority: 1,
+                    imageUrl: 1,
+                    upvotes: 1,
+                    createdAt: 1,
+                    updatedAt: 1
+                }
+            }
+        ]);
 
         res.json(issues);
 
@@ -446,10 +484,23 @@ router.get('/', async (req, res) => {
 
         // Fetch issues with pagination
         // Sort by priority (High first) then by createdAt (newest first)
-        const issues = await Issue.find(filter)
-            .sort({ priority: -1, createdAt: -1 })
-            .skip((parseInt(page) - 1) * parseInt(limit))
-            .limit(parseInt(limit));
+        const issues = await Issue.aggregate([
+            { $match: filter },
+            {
+                $addFields: {
+                    priorityOrder: {
+                        $cond: {
+                            if: { $eq: ['$priority', 'High'] },
+                            then: 0,  // High priority comes first
+                            else: 1   // Normal priority comes second
+                        }
+                    }
+                }
+            },
+            { $sort: { priorityOrder: 1, createdAt: -1 } },
+            { $skip: (parseInt(page) - 1) * parseInt(limit) },
+            { $limit: parseInt(limit) }
+        ]);
 
         res.json({
             issues,
