@@ -1,6 +1,6 @@
 // src/middleware/auth.js
 
-const { admin } = require('../config/firebase');
+const { initializeFirebase, admin } = require('../config/firebase');
 const User = require('../models/User');
 
 // Verify Firebase ID Token
@@ -14,6 +14,9 @@ const verifyToken = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
 
     try {
+        // Ensure Firebase is initialized (important for serverless)
+        initializeFirebase();
+
         // Log token info for debugging (first 20 chars only for security)
         console.log('[auth] Verifying token starting with:', token.substring(0, 20) + '...');
 
