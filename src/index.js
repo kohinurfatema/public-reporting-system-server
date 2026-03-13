@@ -21,6 +21,7 @@ const adminRouter = require('./routes/adminRoutes');
 const staffRouter = require('./routes/staffRoutes');
 const paymentsRouter = require('./routes/paymentRoutes');
 const usersRouter = require('./routes/userRoutes');
+const contactRouter = require('./routes/contactRoutes');
 
 
 const requiredEnv = [
@@ -84,6 +85,7 @@ app.use('/admin', adminRouter);
 app.use('/staff', staffRouter);
 app.use('/payments', paymentsRouter);
 app.use('/users', usersRouter);
+app.use('/contact', contactRouter);
 
 
 // Error handling middleware

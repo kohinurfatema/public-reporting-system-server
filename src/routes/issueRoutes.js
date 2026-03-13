@@ -361,6 +361,37 @@ router.delete('/:id', async (req, res) => {
 
 
 // ----------------------------------------------------------------------
+// GET /issues/related/:id (PUBLIC)
+// Purpose: Fetch related issues by same category (for Issue Details page)
+// Path: GET /issues/related/:id?limit=4
+// NOTE: Must be defined BEFORE /:id to avoid routing conflict
+// ----------------------------------------------------------------------
+router.get('/related/:id', async (req, res) => {
+    try {
+        const issue = await Issue.findById(req.params.id);
+        if (!issue) {
+            return res.status(404).json({ message: 'Issue not found.' });
+        }
+
+        const limit = parseInt(req.query.limit) || 4;
+
+        const related = await Issue.find({
+            _id: { $ne: issue._id },
+            category: issue.category,
+            status: { $ne: 'Rejected' }
+        })
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .select('title category location status priority imageUrl upvotes createdAt');
+
+        res.json(related);
+    } catch (error) {
+        res.status(500).json({ message: 'Internal server error while fetching related issues.' });
+    }
+});
+
+
+// ----------------------------------------------------------------------
 // 6. GET /issues/:id (NEW ROUTE)
 // Purpose: Fetch a single issue by ID (for IssueDetails page)
 // Path: GET /issues/:id
